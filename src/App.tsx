@@ -35,15 +35,13 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
       const response = await fetch('/api/upload-urls', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content: text }),
+        body: formData,
       });
 
       if (response.ok) {
@@ -97,7 +95,7 @@ function App() {
     }
   };
 
-  const handleExport = async (format: 'html' | 'zip') => {
+  const handleExport = async (format: 'html') => {
     if (results.length === 0) {
       alert('No results to export');
       return;
@@ -117,7 +115,7 @@ function App() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `font-validation-report.${format === 'html' ? 'html' : 'zip'}`;
+        a.download = 'font-validation-report.html';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -265,13 +263,6 @@ function App() {
               >
                 <FileText size={16} />
                 <span>Export HTML</span>
-              </button>
-              <button
-                onClick={() => handleExport('zip')}
-                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <Archive size={16} />
-                <span>Export ZIP</span>
               </button>
             </div>
           </div>

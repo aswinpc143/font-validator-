@@ -68,11 +68,12 @@ async function validatePageFonts(url) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     
     // Take screenshot
-    const screenshotFilename = `${Date.now()}-${url.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
-    const screenshotPath = path.join(screenshotsDir, screenshotFilename);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    const screenshot = await page.screenshot({ 
+      fullPage: true,
+      encoding: 'base64'
+    });
     
-    // Extract font information for target elements
+    // Extract font information
     const fontData = await page.evaluate((rules) => {
       const results = [];
       const selectors = Object.keys(rules);
@@ -114,7 +115,7 @@ async function validatePageFonts(url) {
     
     return {
       url,
-      screenshot: screenshotFilename,
+      screenshot: `data:image/png;base64,${screenshot}`,
       results: processedResults,
       totalElements: processedResults.length,
       passedElements: processedResults.filter(r => r.status === 'PASS').length
@@ -134,13 +135,6 @@ async function validatePageFonts(url) {
     await browser.close();
   }
 }
-
-// Serve React app for all non-API routes
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-  }
-});
 
 // API Routes
 app.post('/api/validate-fonts', async (req, res) => {
@@ -198,17 +192,6 @@ app.post('/api/upload-urls', upload.single('file'), (req, res) => {
   }
 });
 
-app.get('/api/screenshot/:filename', (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(screenshotsDir, filename);
-  
-  if (fs.existsSync(filePath)) {
-    res.sendFile(path.resolve(filePath));
-  } else {
-    res.status(404).json({ error: 'Screenshot not found' });
-  }
-});
-
 app.post('/api/export-report', async (req, res) => {
   try {
     const { results, format } = req.body;
@@ -218,38 +201,6 @@ app.post('/api/export-report', async (req, res) => {
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Content-Disposition', 'attachment; filename=font-validation-report.html');
       res.send(htmlReport);
-    } else if (format === 'zip') {
-      const zipFilename = `font-validation-report-${Date.now()}.zip`;
-      const zipPath = path.join(__dirname, zipFilename);
-      
-      const output = fs.createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      
-      output.on('close', () => {
-        res.download(zipPath, zipFilename, (err) => {
-          if (!err) {
-            fs.unlinkSync(zipPath);
-          }
-        });
-      });
-      
-      archive.pipe(output);
-      
-      // Add HTML report
-      const htmlReport = generateHTMLReport(results);
-      archive.append(htmlReport, { name: 'font-validation-report.html' });
-      
-      // Add screenshots
-      results.forEach(result => {
-        if (result.screenshot) {
-          const screenshotPath = path.join(screenshotsDir, result.screenshot);
-          if (fs.existsSync(screenshotPath)) {
-            archive.file(screenshotPath, { name: `screenshots/${result.screenshot}` });
-          }
-        }
-      });
-      
-      archive.finalize();
     } else {
       res.status(400).json({ error: 'Invalid format' });
     }
@@ -341,6 +292,13 @@ function generateHTMLReport(results) {
   
   return html;
 }
+
+// Serve React app for all non-API routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
